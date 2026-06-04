@@ -154,7 +154,7 @@ class PID:
         self.err_before = err
         return delta
 
-def go_straight(duty, ratio = 1):
+def go_straight(duty, ratio = RATIO):
     pwma.ChangeDutyCycle(duty)
     pwmb.ChangeDutyCycle(duty*ratio)
 
