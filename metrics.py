@@ -18,6 +18,14 @@ FORWARD_DUTY = 20       # forward()中的基础速度
 RATIO = 1.025           # 左右轮补偿比
 FINAL_RATIO = 1.04      # 最终冲线补偿比
 
+# 转向速度闭环参数（参考 pid_control.py）
+LS, RS = 6, 12
+SPEED_SAMPLE_TIME = 0.1
+SPEED_PULSE_PER_REV = 585.0
+TURN_SPEED_PER_DUTY = 1.9 / TURN_DUTY
+LEFT_TURN_PID = (30, 0.06, 20)
+RIGHT_TURN_PID = (40, 0.01, 23)
+
 # 面积阈值
 LEAST_AREA_FIND_CUBE = 3000    # 找到魔方的最小面积
 AREA_FOR_TURN = 80000          # 接近魔方停车的面积
@@ -25,6 +33,7 @@ LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
 FIND_TURN_TIME = 0.33      # 搜索时每次转动时间
+FIND_TURN_REST_TIME = 1
 TURN_LEFT_TIME = 0.6       # 绕行左转时间
 STRAIGHT_TIME = 0.5        # 绕行直行时间
 TURN_RIGHT_TIME = 0.7      # 绕行右转时间
@@ -57,6 +66,16 @@ cap.set(cv2.CAP_PROP_FPS, fps)
 frame = 0
 fpsCount = 0
 getPic = 0
+getSpeed = 0
+lspeed = 0
+rspeed = 0
+lcounter = 0
+rcounter = 0
+speedGet = None
+speedLock = thd.Lock()
+turnPidLock = thd.Lock()
+turnPidMode = None
+turnPidController = None
 
 def picShoot():
     global frame, cap, fpsCount, getPic
@@ -77,6 +96,40 @@ def picShoot():
         cap.release()
 
 picGet = thd.Thread(target=picShoot)
+
+def speed_callback(channel):
+    global lcounter, rcounter
+    with speedLock:
+        if channel == LS:
+            lcounter += 1
+        elif channel == RS:
+            rcounter += 1
+
+def speedShoot():
+    global lspeed, rspeed, lcounter, rcounter, getSpeed
+    while getSpeed == 1:
+        time.sleep(SPEED_SAMPLE_TIME)
+        with speedLock:
+            left_count = lcounter
+            right_count = rcounter
+            lcounter = 0
+            rcounter = 0
+
+        lspeed = left_count / SPEED_PULSE_PER_REV
+        rspeed = right_count / SPEED_PULSE_PER_REV
+
+        with turnPidLock:
+            mode = turnPidMode
+            controller = turnPidController
+
+        if mode == 'left':
+            right_duty = controller.update(rspeed)
+            pwmb.ChangeDutyCycle(0)
+            pwma.ChangeDutyCycle(right_duty)
+        elif mode == 'right':
+            left_duty = controller.update(lspeed)
+            pwmb.ChangeDutyCycle(left_duty)
+            pwma.ChangeDutyCycle(0)
 
 # ===== 图像处理 =====
 # HSV空间下目标颜色, 最好根据卡纸颜色重设
@@ -131,15 +184,42 @@ def init():
     IO = [EA, I2, I1, EB, I4, I3] = [13, 19, 26, 16, 21, 17]
     GPIO.setmode(GPIO.BCM)
     GPIO.setup([EA, I2, I1, EB, I4, I3], GPIO.OUT)
+    GPIO.setup([LS, RS], GPIO.IN)
     GPIO.output([EA, I2, EB, I3], GPIO.LOW)
     GPIO.output([I1, I4], GPIO.HIGH)
-    global pwma, pwmb
+    global pwma, pwmb, getSpeed, speedGet
     pwma = GPIO.PWM(EA, FREQUENCY)
     pwmb = GPIO.PWM(EB, FREQUENCY)
     pwma.start(0)
     pwmb.start(0)
+    GPIO.add_event_detect(LS, GPIO.RISING, callback=speed_callback)
+    GPIO.add_event_detect(RS, GPIO.RISING, callback=speed_callback)
+    getSpeed = 1
+    speedGet = thd.Thread(target=speedShoot, daemon=True)
+    speedGet.start()
 
 # ===== 控制行走部分 =====
+class WheelSpeedPID:
+    def __init__(self, P, I, D, target_speed):
+        self.Kp = P
+        self.Ki = I
+        self.Kd = D
+        self.target_speed = target_speed
+        self.err_before = 0
+        self.err_sum = 0
+        self.u = 0
+
+    def update(self, feedback_speed):
+        err = self.target_speed - feedback_speed
+        self.err_sum += err
+        self.u = self.Kp * err + self.Ki * self.err_sum + self.Kd * (err - self.err_before)
+        self.err_before = err
+        if self.u > 100:
+            self.u = 100
+        elif self.u < 0:
+            self.u = 0
+        return self.u
+
 class PID:
     (Kp, Ki, Kd) = (0, 0, 0)
     err_before = 0
@@ -154,15 +234,33 @@ class PID:
         self.err_before = err
         return delta
 
+def set_turn_pid_mode(mode, duty=0):
+    global turnPidMode, turnPidController
+    with turnPidLock:
+        if mode is None:
+            turnPidMode = None
+            turnPidController = None
+            return
+
+        target_speed = duty * TURN_SPEED_PER_DUTY
+        if mode == 'left':
+            turnPidController = WheelSpeedPID(*RIGHT_TURN_PID, target_speed)
+        elif mode == 'right':
+            turnPidController = WheelSpeedPID(*LEFT_TURN_PID, target_speed)
+        turnPidMode = mode
+
 def go_straight(duty, ratio = RATIO):
+    set_turn_pid_mode(None)
     pwma.ChangeDutyCycle(duty)
     pwmb.ChangeDutyCycle(duty*ratio)
 
 def stop():
+    set_turn_pid_mode(None)
     pwma.ChangeDutyCycle(0)
     pwmb.ChangeDutyCycle(0)
 
 def turn(duty, delta):
+    set_turn_pid_mode(None)
     left = duty - delta
     right = duty + delta
     if left > 100:
@@ -177,12 +275,14 @@ def turn(duty, delta):
     pwma.ChangeDutyCycle(right)
 
 def turn_left(duty):
+    set_turn_pid_mode('left', duty)
     left = 0
     right = duty
     pwmb.ChangeDutyCycle(left)
     pwma.ChangeDutyCycle(right)
 
 def turn_right(duty):
+    set_turn_pid_mode('right', duty)
     left = duty
     right = 0
     pwmb.ChangeDutyCycle(left)
@@ -215,7 +315,7 @@ def detected_color(color):
                 turn_right(TURN_DUTY)
                 time.sleep(FIND_TURN_TIME)
                 stop()
-                time.sleep(0.01)
+                time.sleep(FIND_TURN_REST_TIME)
                 img = frame.astype(np.uint8)
                 img_Mask = getImg_Mask(img, color)
                 cv2.imshow("Current", frame)
@@ -659,6 +759,8 @@ if __name__ == '__main__':
 
     # ========== 清理资源 ==========
     print("[清理] 释放GPIO、摄像头、窗口...")
+    getPic = 0
+    getSpeed = 0
     GPIO.cleanup()
     cap.release()
     cv2.destroyAllWindows()
