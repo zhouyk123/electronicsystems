@@ -3,6 +3,7 @@ import time
 import threading
 import numpy
 import matplotlib.pyplot as plt
+from dataclasses import dataclass, field
 
 
 EA, I2, I1, EB, I4, I3, LS, RS = (13, 19, 26, 16, 20, 21, 6, 12)
@@ -17,11 +18,6 @@ pwma = GPIO.PWM(EA, FREQUENCY)
 pwmb = GPIO.PWM(EB, FREQUENCY)
 pwma.start(0)
 pwmb.start(0)
-
-lspeed = 0
-rspeed = 0
-lcounter = 0
-rcounter = 0
 
 class PID:
     """PID Controller
@@ -42,6 +38,7 @@ class PID:
         self.err_pre = self.ideal_speed - feedback_value
         self.integral+= self.err_pre
         self.u = self.Kp*self.err_pre + self.Ki*self.integral + self.Kd*(self.err_pre-self.err_last)
+        self.err_last = self.err_pre
         if self.u> 100:
             self.u= 100
         elif self.u < 0:
@@ -61,33 +58,70 @@ class PID:
         self.Kd = derivative_gain
 
 
-
-def my_callback(channel):
-    global lcounter
-    global rcounter
-    if (channel==LS):
-        lcounter+=1
-    elif(channel==RS):
-        rcounter+=1
+# def my_callback(channel):
+#     global lcounter
+#     global rcounter
+#     if (channel==LS):
+#         lcounter+=1
+#     elif(channel==RS):
+#         rcounter+=1
             
-def getspeed():
-    global rspeed
-    global lspeed
-    global lcounter
-    global rcounter
-    GPIO.add_event_detect(LS,GPIO.RISING,callback=my_callback)
-    GPIO.add_event_detect(RS,GPIO.RISING,callback=my_callback)
-    while True:
-        rspeed=(rcounter/585.0)
-        lspeed=(lcounter/585.0)
-        rcounter = 0
-        lcounter = 0
-        time.sleep(0.1)
-   
+# def getspeed():
+#     global rspeed
+#     global lspeed
+#     global lcounter
+#     global rcounter
+#     GPIO.add_event_detect(LS,GPIO.RISING,callback=my_callback)
+#     GPIO.add_event_detect(RS,GPIO.RISING,callback=my_callback)
+#     while True:
+#         rspeed=(rcounter/585.0)
+#         lspeed=(lcounter/585.0)
+#         rcounter = 0
+#         lcounter = 0
+#         time.sleep(0.1)
 
-   
-thread1=threading.Thread(target=getspeed)
-thread1.start()
+@dataclass
+class SpeedRecorder:
+    channel: int
+    speed: float = 0.0
+    desc: str = ""
+
+@dataclass
+class Counter:
+    channel: int
+    count: int = 0
+    desc: str = ""
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+def make_count_callback(counter):
+    def callback(channel):
+        with counter.lock:
+            counter.count += 1
+    return callback
+
+def getspeed(speed_recorder: SpeedRecorder):
+    counter = Counter(channel=speed_recorder.channel)
+    GPIO.add_event_detect(
+        speed_recorder.channel,
+        GPIO.RISING,
+        callback=make_count_callback(counter)
+    )
+
+    while True:
+        with counter.lock:
+            count = counter.count
+            counter.count = 0
+        speed_recorder.speed = count / 585.0
+        time.sleep(0.1)
+
+speed_recorder_left = SpeedRecorder(channel=LS)
+speed_recorder_right = SpeedRecorder(channel=RS)
+
+thread_left = threading.Thread(target=getspeed, args=(speed_recorder_left,), daemon=True)
+thread_right = threading.Thread(target=getspeed, args=(speed_recorder_right,), daemon=True)
+
+thread_left.start()
+thread_right.start()
 
 
 
@@ -105,14 +139,16 @@ R_control = PID(40,0.01,23,speed,r_origin_duty)
 
 try:
     while True:
+        lspeed = speed_recorder_left.speed
+        rspeed = speed_recorder_right.speed
         pwma.ChangeDutyCycle(L_control.update(lspeed))
         pwmb.ChangeDutyCycle(R_control.update(rspeed))
         x.append([i])
         y1.append(lspeed)
         y2.append(rspeed)
         time.sleep(0.1)
-        i+=  0.1
-        print ('left: %f  right: %f lduty: %f rduty: %f'%(lspeed,rspeed,L_control.u,R_control.u))
+        i +=  0.1
+        print('left: %f  right: %f lduty: %f rduty: %f'%(lspeed,rspeed,L_control.u,R_control.u))
         
 except KeyboardInterrupt:
     pass
