@@ -83,7 +83,7 @@ def main():
 
         if worker.is_alive():
             print(f"[timeout] {args.action} did not finish in {args.timeout:.2f}s; stopping.")
-            metrics.triggered = True
+            metrics.force_move_done()
             metrics.brake(0.1)
             worker.join(1.0)
 

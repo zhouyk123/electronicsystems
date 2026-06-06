@@ -7,6 +7,7 @@ an optional safety stop when the target is lost.
 Examples:
 python3 test_forward_color.py red --timeout 20
 python3 test_forward_color.py yellow --duty 18 --stop-area 70000
+python3 test_forward_color.py green --follow-area 1200
 """
 
 import argparse
@@ -51,18 +52,20 @@ def main():
     parser.add_argument("--duty", type=float, default=metrics.FORWARD_DUTY)
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--stop-area", type=float, default=metrics.AREA_FOR_TURN)
+    parser.add_argument("--follow-area", type=float, default=metrics.LEAST_AREA_FOLLOW)
     parser.add_argument("--print-interval", type=float, default=0.2)
     parser.add_argument("--camera-wait", type=float, default=5.0)
     parser.add_argument(
         "--keep-moving-when-lost",
         action="store_true",
-        help="Match metrics.forward_color() exactly when the target disappears.",
+        help="Do not stop when area is below --follow-area.",
     )
     args = parser.parse_args()
 
     try:
         metrics.FORWARD_DUTY = args.duty
         metrics.AREA_FOR_TURN = args.stop_area
+        metrics.LEAST_AREA_FOLLOW = args.follow_area
         metrics.pidController = metrics.WheelSpeedPID(**metrics.FORWARD_PID, target=0, lb=-8, ub=8)
 
         metrics.init()
@@ -74,11 +77,15 @@ def main():
         start = time.time()
         last_print = 0.0
         while time.time() - start < args.timeout:
+            loop_start = time.time()
             frame = metrics.frame.astype(np.uint8)
             mask = metrics.getImg_Mask(frame, args.color)
             center_x, area, contours = metrics.get_Cube_center_area(mask)
 
-            if area > 0:
+            if area > args.stop_area:
+                print(f"[done] area {area:.0f} exceeded stop area {args.stop_area:.0f}")
+                break
+            if area >= args.follow_area:
                 metrics.forward(center_x)
             elif not args.keep_moving_when_lost:
                 metrics.stop(0)
@@ -103,9 +110,8 @@ def main():
             if key in (27, ord("q")):
                 break
 
-            if area > args.stop_area:
-                print(f"[done] area {area:.0f} exceeded stop area {args.stop_area:.0f}")
-                break
+            elapsed = time.time() - loop_start
+            time.sleep(max(0, metrics.FORWARD_CONTROL_PERIOD - elapsed))
 
         metrics.stop()
     finally:

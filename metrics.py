@@ -23,21 +23,21 @@ FINAL_RATIO = 1.04      # 最终冲线补偿比
 # 转向速度闭环参数（参考 pid_control.py）
 SPEED_SAMPLE_TIME = 0.1
 SPEED_PULSE_PER_REV = 585.0
-TURN_SPEED_TARGET = 1.9
+TURN_SPEED_TARGET = 5
 SPEED_PID = {"P":30, "I":0.06, "D":20}
 FORWARD_PID = {"P":0.1, "I":0, "D":1}
 ANGLE_FACTOR = 90
 
 # 面积阈值
+LEAST_AREA_FOLLOW = 1000       # 跟踪的最小面积
 LEAST_AREA_FIND_CUBE = 3000    # 找到魔方的最小面积
 AREA_FOR_TURN = 80000          # 接近魔方停车的面积
 LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
-FIND_TURN_TIME = 0.33      # 搜索时每次转动时间
 FIND_TURN_REST_TIME = 1
 INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
-
+FORWARD_CONTROL_PERIOD = 0.05
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
@@ -62,11 +62,18 @@ speed_lcounter = 0  # 用于测速的 counter
 speed_rcounter = 0
 move_lcounter = 0  # 用于计数的 counter
 move_rcounter = 0
+threshold = 0
+triggered = False
 speedGet = None
 speedLock = thd.Lock()
+motorLock = thd.Lock()
 turnPidLock = thd.Lock()
+moveDone = thd.Event()
 turnPidMode = None
 turnPidController = None
+turnPidController_left = None
+turnPidController_right = None
+turnPidGeneration = 0
 
 def picShoot():
     global frame, cap, fpsCount, getPic
@@ -96,11 +103,13 @@ def speed_callback(channel):
             move_lcounter += 1
             if threshold > 0 and move_lcounter >= threshold * SPEED_PULSE_PER_REV:
                 triggered = True
+                moveDone.set()
         elif channel == RS:
             speed_rcounter += 1
             move_rcounter += 1
             if threshold > 0 and move_rcounter >= threshold * SPEED_PULSE_PER_REV:
                 triggered = True
+                moveDone.set()
 
 
 # ===== 图像处理 =====
@@ -181,7 +190,6 @@ def detected_color(color):
             flag = 0
             while turnCount < MAX_TURN_COUNT:
                 turn_right(TURN_DUTY, 45)
-                time.sleep(FIND_TURN_TIME)
                 stop()
                 time.sleep(FIND_TURN_REST_TIME)
                 img = frame.astype(np.uint8)
@@ -205,16 +213,21 @@ def detected_color(color):
 
 def forward_color(color):
     while True:
+        loop_start = time.time()
         img = frame.astype(np.uint8)
         img_Mask = getImg_Mask(img, color)
         center_x, area, edge = get_Cube_center_area(img_Mask)
         cv2.imshow("Current", frame)
         cv2.waitKey(1)
-        if area > 0 :
-            forward(center_x)
         if area > AREA_FOR_TURN:
             stop()
             break
+        if area >= LEAST_AREA_FOLLOW:
+            forward(center_x)
+        else:
+            stop(0)
+        elapsed = time.time() - loop_start
+        time.sleep(max(0, FORWARD_CONTROL_PERIOD - elapsed))
 
 
 FREQUENCY = 80
@@ -233,27 +246,46 @@ def speedShoot():
             speed_lcounter = 0
             speed_rcounter = 0
 
-        lspeed = left_count / SPEED_PULSE_PER_REV
-        rspeed = right_count / SPEED_PULSE_PER_REV
+        lspeed = left_count / SPEED_PULSE_PER_REV / SPEED_SAMPLE_TIME
+        rspeed = right_count / SPEED_PULSE_PER_REV / SPEED_SAMPLE_TIME
 
         with turnPidLock:
             mode = turnPidMode
+            left_controller = turnPidController_left
+            right_controller = turnPidController_right
+            generation = turnPidGeneration
 
-        if mode in ("left", "right"):  # 只在左转或右转时才依靠这里 PID 调节
-            right_duty = turnPidController_right.update(rspeed)
-            left_duty = turnPidController_left.update(lspeed)
-            pwma.ChangeDutyCycle(left_duty)
-            pwmb.ChangeDutyCycle(right_duty)
+        if mode in ("left", "right") and left_controller and right_controller:
+            right_duty = right_controller.update(rspeed)
+            left_duty = left_controller.update(lspeed)
+            with motorLock:
+                with turnPidLock:
+                    still_current = (
+                        turnPidMode == mode
+                        and turnPidController_left is left_controller
+                        and turnPidController_right is right_controller
+                        and turnPidGeneration == generation
+                    )
+                if still_current:
+                    pwma.ChangeDutyCycle(left_duty)
+                    pwmb.ChangeDutyCycle(right_duty)
 
 
 def set_motor_mode(pin:list[int], direction:int):
     assert direction in (0,1,2)
-    if direction == 0:
-        GPIO.output(pin[1], GPIO.HIGH)
-        GPIO.output(pin[2], GPIO.LOW)
-    elif direction == 1:
-        GPIO.output(pin[1], GPIO.LOW)
-        GPIO.output(pin[2], GPIO.HIGH)
+    with motorLock:
+        if direction == 0:
+            GPIO.output(pin[1], GPIO.HIGH)
+            GPIO.output(pin[2], GPIO.LOW)
+        elif direction == 1:
+            GPIO.output(pin[1], GPIO.LOW)
+            GPIO.output(pin[2], GPIO.HIGH)
+
+
+def set_motor_duty(left_duty, right_duty):
+    with motorLock:
+        pwma.ChangeDutyCycle(left_duty)
+        pwmb.ChangeDutyCycle(right_duty)
 
 
 def init_counter():
@@ -263,6 +295,25 @@ def init_counter():
         move_rcounter = 0
         threshold = 0
         triggered = False
+        moveDone.clear()
+
+
+def set_move_threshold(value):
+    global threshold, triggered
+    with speedLock:
+        threshold = value
+        triggered = False
+        moveDone.clear()
+        if threshold <= 0:
+            triggered = True
+            moveDone.set()
+
+
+def force_move_done():
+    global triggered
+    with speedLock:
+        triggered = True
+        moveDone.set()
 
 
 def init():
@@ -274,7 +325,8 @@ def init():
     GPIO.setup([EA, I2, I1, EB, I4, I3], GPIO.OUT)
     GPIO.setup([B2A, B1A], GPIO.IN)
 
-    GPIO.output([EA, EB], GPIO.LOW)
+    with motorLock:
+        GPIO.output([EA, EB], GPIO.LOW)
 
     global left_pin, right_pin, LS, RS
     if MODE_ == 0:
@@ -289,9 +341,8 @@ def init():
     set_motor_mode(right_pin, MODE_R)
     
 
-    global pwma, pwmb, getSpeed, speedGet, threshold, triggered
-    threshold = 0
-    triggered = False  # 马达计数达到多少时触发外部函数
+    global pwma, pwmb, getSpeed, speedGet
+    init_counter()
     pwma = GPIO.PWM(left_pin[0], FREQUENCY)
     pwmb = GPIO.PWM(right_pin[0], FREQUENCY)
     pwma.start(0)
@@ -329,8 +380,9 @@ class WheelSpeedPID:
 
 
 def set_turn_pid_mode(mode, duty=0):
-    global turnPidMode, turnPidController, turnPidController_left, turnPidController_right
+    global turnPidMode, turnPidController, turnPidController_left, turnPidController_right, turnPidGeneration
     with turnPidLock:
+        turnPidGeneration += 1
         if mode is None:
             turnPidMode = None
             turnPidController = None
@@ -348,70 +400,59 @@ def set_turn_pid_mode(mode, duty=0):
 
 def go_straight(duty, ratio=RATIO, dist=1):
     init_counter()
-    global threshold, triggered
-    threshold = dist
+    set_move_threshold(dist)
 
     set_motor_mode(left_pin, MODE_L)
     set_motor_mode(right_pin, MODE_R)
     set_turn_pid_mode(None)
 
-    pwma.ChangeDutyCycle(duty)
-    pwmb.ChangeDutyCycle(duty*ratio)
+    set_motor_duty(duty, duty*ratio)
 
-    while True:
-        if triggered:
-            brake()
-            return
+    moveDone.wait()
+    brake()
 
 def stop(stop_time=0.5):
     set_turn_pid_mode(None)
-    pwma.ChangeDutyCycle(0)
-    pwmb.ChangeDutyCycle(0)
+    set_motor_duty(0, 0)
     time.sleep(stop_time)
 
 def brake(brake_time=0.5):
     set_turn_pid_mode(None)
-    pwma.ChangeDutyCycle(0)
-    pwmb.ChangeDutyCycle(0)
-    GPIO.output(left_pin[:3], GPIO.LOW)
-    GPIO.output(right_pin[:3], GPIO.LOW)
+    with motorLock:
+        pwma.ChangeDutyCycle(100)
+        pwmb.ChangeDutyCycle(100) 
+        GPIO.output(left_pin[1:3], GPIO.LOW)
+        GPIO.output(right_pin[1:3], GPIO.LOW)
     time.sleep(brake_time)
+    set_motor_duty(0, 0)
 
 def turn_left(duty=TURN_DUTY, angle=90):
     init_counter()
-    global threshold, triggered
-    threshold = angle / ANGLE_FACTOR
+    set_move_threshold(angle / ANGLE_FACTOR)
 
     set_motor_mode(left_pin, not MODE_L)
     set_motor_mode(right_pin, MODE_R)
     set_turn_pid_mode('left', duty)
     left = duty
     right = duty
-    pwma.ChangeDutyCycle(left)
-    pwmb.ChangeDutyCycle(right)
+    set_motor_duty(left, right)
 
-    while True:
-        if triggered:
-            brake()
-            return
+    moveDone.wait()
+    brake()
 
 def turn_right(duty=TURN_DUTY, angle=90):
     init_counter()
-    global threshold, triggered
-    threshold = angle / ANGLE_FACTOR
+    set_move_threshold(angle / ANGLE_FACTOR)
 
     set_motor_mode(left_pin, MODE_L)
     set_motor_mode(right_pin, not MODE_R)
     set_turn_pid_mode('right', duty)
     left = duty
     right = duty
-    pwma.ChangeDutyCycle(left)
-    pwmb.ChangeDutyCycle(right)
+    set_motor_duty(left, right)
 
-    while True:
-        if triggered:
-            brake()
-            return
+    moveDone.wait()
+    brake()
 
 def forward(center_x):
     def turn(duty, delta):
@@ -426,8 +467,7 @@ def forward(center_x):
             right = 100
         if right < 0:
             right = 0
-        pwma.ChangeDutyCycle(left)
-        pwmb.ChangeDutyCycle(right)
+        set_motor_duty(left, right)
     err = Center[0] - center_x
     delta = pidController.update(err)
     turn(FORWARD_DUTY, delta)
