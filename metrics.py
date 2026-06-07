@@ -271,7 +271,7 @@ def speedShoot():
                     pwmb.ChangeDutyCycle(right_duty)
 
 
-def set_motor_mode(pin:list[int], direction:int):
+def set_motor_mode(pin: list, direction: int):
     assert direction in (0,1,2)
     with motorLock:
         if direction == 0:
