@@ -7,9 +7,9 @@ import threading as thd
 
 # ===== 关键参数 =====
 # 前进模式（朝前/朝后）
-MODE_ = 1  # 0, 1
-MODE_L = 0  # 0, 1
-MODE_R = 0
+MODE_ = 0  # 0, 1
+MODE_L = 1  # 0, 1
+MODE_R = 1
 
 # 速度参数
 TURN_DUTY = 20          # 原地转弯速度（mode=='green'分支）
