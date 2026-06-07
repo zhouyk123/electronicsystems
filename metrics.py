@@ -235,7 +235,7 @@ FREQUENCY = 80
 # ===== 初始化 =====
 def speedShoot():
     """
-    原地转弯的闭环控制，包括测速和调速
+    运动闭环控制，包括测速和调速
     """
     global lspeed, rspeed, speed_lcounter, speed_rcounter, getSpeed
     while getSpeed == 1:
@@ -255,7 +255,7 @@ def speedShoot():
             right_controller = turnPidController_right
             generation = turnPidGeneration
 
-        if mode in ("left", "right") and left_controller and right_controller:
+        if mode in ("left", "right", "straight") and left_controller and right_controller:
             right_duty = right_controller.update(rspeed)
             left_duty = left_controller.update(lspeed)
             with motorLock:
@@ -423,7 +423,7 @@ class WheelSpeedPID:
         return self.u
 
 
-def set_turn_pid_mode(mode, duty=0):
+def set_turn_pid_mode(mode, duty=0, ratio=1):
     global turnPidMode, turnPidController, turnPidController_left, turnPidController_right, turnPidGeneration
     with turnPidLock:
         turnPidGeneration += 1
@@ -439,6 +439,11 @@ def set_turn_pid_mode(mode, duty=0):
             turnPidController = None
             turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
             turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed)
+        elif mode == 'straight':
+            target_speed = TURN_SPEED_TARGET * duty / TURN_DUTY
+            turnPidController = None
+            turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
+            turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed * ratio)
         turnPidMode = mode
 
 
@@ -448,9 +453,8 @@ def go_straight(duty, ratio=RATIO, dist=1):
 
     set_motor_mode(left_pin, MODE_L)
     set_motor_mode(right_pin, MODE_R)
-    set_turn_pid_mode(None)
-
     set_motor_duty(duty, duty*ratio)
+    set_turn_pid_mode('straight', duty, ratio)
 
     moveDone.wait()
     brake()
