@@ -12,7 +12,7 @@ MODE_L = 1  # 0, 1
 MODE_R = 1
 
 # 速度参数
-TURN_DUTY = 20          # 原地转弯速度（mode=='green'分支）
+TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
 TURN_DUTY_FAST = 40     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
 STRAIGHT_DUTY_FAST = 40 # 直行速度（mode=='red'分支）
@@ -21,13 +21,14 @@ RATIO = 1.025           # 左右轮补偿比
 FINAL_RATIO = 1.04      # 最终冲线补偿比
 
 # 转向速度闭环参数（参考 pid_control.py）
-SPEED_SAMPLE_TIME = 0.1
+SPEED_SAMPLE_TIME = 0.05
 SPEED_PULSE_PER_REV = 585.0
-TURN_SPEED_TARGET = 1
+TURN_SPEED_TARGET = 0.8
 SPEED_TARGET = 3
-SPEED_PID = {"P":30, "I":0.06, "D":1}
+SPEED_PID = {"P":3, "I":5, "D":60.0}
 FORWARD_PID = {"P":0.1, "I":0, "D":1}
-ANGLE_FACTOR = 90
+ANGLE_FACTOR = 175
+SEARCH_TURN_ANGLE=45
 
 # 面积阈值
 LEAST_AREA_FOLLOW = 1000       # 跟踪的最小面积
@@ -36,7 +37,7 @@ AREA_FOR_TURN = 80000          # 接近魔方停车的面积
 LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
-FIND_TURN_REST_TIME = 1
+FIND_TURN_REST_TIME = 0
 INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
 FORWARD_CONTROL_PERIOD = 0.05
 
@@ -190,7 +191,7 @@ def detected_color(color):
             turnCount = 0
             flag = 0
             while turnCount < MAX_TURN_COUNT:
-                turn_right(TURN_DUTY, 45)
+                turn_right(TURN_DUTY, SEARCH_TURN_ANGLE)
                 stop()
                 time.sleep(FIND_TURN_REST_TIME)
                 img = frame.astype(np.uint8)
@@ -465,7 +466,7 @@ def stop(stop_time=0.5):
     set_motor_duty(0, 0)
     time.sleep(stop_time)
 
-def brake(brake_time=0.5):
+def brake(brake_time=0.3):
     set_turn_pid_mode(None)
     with motorLock:
         pwma.ChangeDutyCycle(100)
