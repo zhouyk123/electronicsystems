@@ -23,7 +23,8 @@ FINAL_RATIO = 1.04      # 最终冲线补偿比
 # 转向速度闭环参数（参考 pid_control.py）
 SPEED_SAMPLE_TIME = 0.1
 SPEED_PULSE_PER_REV = 585.0
-TURN_SPEED_TARGET = 5
+TURN_SPEED_TARGET = 1
+SPEED_TARGET = 3
 SPEED_PID = {"P":30, "I":0.06, "D":20}
 FORWARD_PID = {"P":0.1, "I":0, "D":1}
 ANGLE_FACTOR = 90
@@ -434,13 +435,13 @@ def set_turn_pid_mode(mode, duty=0, ratio=1):
             turnPidController_right = None
             return
 
-        target_speed = TURN_SPEED_TARGET
         if mode in ('left', 'right'):
+            target_speed = TURN_SPEED_TARGET
             turnPidController = None
             turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
             turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed)
         elif mode == 'straight':
-            target_speed = TURN_SPEED_TARGET * duty / TURN_DUTY
+            target_speed = SPEED_TARGET
             turnPidController = None
             turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
             turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed * ratio)
