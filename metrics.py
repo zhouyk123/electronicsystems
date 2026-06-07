@@ -16,7 +16,7 @@ TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
 TURN_DUTY_FAST = 20     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
 STRAIGHT_DUTY_FAST = 40 # 直行速度（mode=='red'分支）
-FORWARD_DUTY = 40       # forward()中的基础 duty
+FORWARD_DUTY = 15       # forward()中的基础 duty
 RATIO = 1.025           # 左右轮补偿比
 FINAL_RATIO = 1.04      # 最终冲线补偿比
 
@@ -26,7 +26,7 @@ SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
 SPEED_TARGET = 3
 SPEED_PID = {"P":3, "I":5, "D":60.0}
-FORWARD_PID = {"P":0.1, "I":1, "D":1}
+FORWARD_PID = {"P":0.005, "I":0.0, "D":0.0}
 ANGLE_FACTOR = 175
 SEARCH_TURN_ANGLE=45
 
@@ -117,7 +117,7 @@ def speed_callback(channel):
 # ===== 图像处理 =====
 # HSV空间下目标颜色, 最好根据卡纸颜色重设
 low_red1 = np.array([0, 70,80])
-high_red1 = np.array([7, 255, 255])
+high_red1 = np.array([10, 255, 255])
 low_red2 = np.array([165, 70, 80])
 high_red2 = np.array([180, 255, 255])
 low_yellow = np.array([25, 80, 100])
