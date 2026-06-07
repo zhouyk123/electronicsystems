@@ -11,8 +11,6 @@ import argparse
 import threading
 import time
 
-import RPi.GPIO as GPIO
-
 import metrics
 
 
@@ -97,12 +95,7 @@ def main():
             )
         )
     finally:
-        try:
-            metrics.getSpeed = 0
-            metrics.stop(0)
-        except Exception:
-            pass
-        GPIO.cleanup()
+        metrics.shutdown()
 
 
 if __name__ == "__main__":

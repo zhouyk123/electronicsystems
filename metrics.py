@@ -114,9 +114,9 @@ def speed_callback(channel):
 
 # ===== 图像处理 =====
 # HSV空间下目标颜色, 最好根据卡纸颜色重设
-low_red1 = np.array([0, 90,100])
+low_red1 = np.array([0, 70,80])
 high_red1 = np.array([7, 255, 255])
-low_red2 = np.array([165, 90, 100])
+low_red2 = np.array([165, 70, 80])
 high_red2 = np.array([180, 255, 255])
 low_yellow = np.array([25, 80, 100])
 high_yellow = np.array([35, 255, 255])
@@ -318,9 +318,10 @@ def force_move_done():
 
 def init():
     print("[初始化] GPIO清理...")
-    GPIO.cleanup()
-    IO = [EA, I2, I1, B2A, EB, I4, I3, B1A] = [13, 19, 26, 6, 16, 21, 17, 12]
+    GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
+    GPIO.cleanup()
+    IO = [EA, I2, I1, B2A, EB, I4, I3, B1A] = [13, 19, 26, 6, 16, 20, 21, 12]
 
     GPIO.setup([EA, I2, I1, EB, I4, I3], GPIO.OUT)
     GPIO.setup([B2A, B1A], GPIO.IN)
@@ -352,6 +353,49 @@ def init():
     getSpeed = 1
     speedGet = thd.Thread(target=speedShoot, daemon=True)
     speedGet.start()
+
+
+def shutdown(cleanup_gpio=True):
+    global getSpeed, getPic
+
+    getSpeed = 0
+    getPic = 0
+    set_turn_pid_mode(None)
+
+    for channel_name in ("LS", "RS"):
+        channel = globals().get(channel_name)
+        if channel is None:
+            continue
+        try:
+            GPIO.remove_event_detect(channel)
+        except Exception:
+            pass
+
+    for pwm_name in ("pwma", "pwmb"):
+        pwm = globals().get(pwm_name)
+        if pwm is None:
+            continue
+        try:
+            pwm.ChangeDutyCycle(0)
+            pwm.stop()
+        except Exception:
+            pass
+
+    thread = globals().get("speedGet")
+    if thread is not None and thread.is_alive():
+        thread.join(SPEED_SAMPLE_TIME * 2)
+
+    try:
+        cap.release()
+    except Exception:
+        pass
+    try:
+        cv2.destroyAllWindows()
+    except Exception:
+        pass
+
+    if cleanup_gpio:
+        GPIO.cleanup()
 
 # ===== 控制行走部分 =====
 class WheelSpeedPID:

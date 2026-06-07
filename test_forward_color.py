@@ -15,7 +15,6 @@ import time
 
 import cv2
 import numpy as np
-import RPi.GPIO as GPIO
 
 import metrics
 
@@ -115,15 +114,7 @@ def main():
 
         metrics.stop()
     finally:
-        try:
-            metrics.getPic = 0
-            metrics.getSpeed = 0
-            metrics.stop(0)
-        except Exception:
-            pass
-        metrics.cap.release()
-        cv2.destroyAllWindows()
-        GPIO.cleanup()
+        metrics.shutdown()
 
 
 if __name__ == "__main__":
