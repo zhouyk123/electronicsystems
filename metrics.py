@@ -321,7 +321,7 @@ def init():
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
     GPIO.cleanup()
-    IO = [EA, I2, I1, B2A, EB, I4, I3, B1A] = [13, 19, 26, 6, 16, 20, 21, 12]
+    IO = [EA, I2, I1, B2A, EB, I4, I3, B1A] = [13, 19, 26, 6, 16, 20, 21, 25]
 
     GPIO.setup([EA, I2, I1, EB, I4, I3], GPIO.OUT)
     GPIO.setup([B2A, B1A], GPIO.IN)
