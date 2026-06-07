@@ -28,6 +28,30 @@ def wait_for_frame(timeout):
     return False
 
 
+def average_hsv_in_detected_area(frame, contours):
+    filtered_contours = [contour for contour in contours if cv2.contourArea(contour) >= 500]
+    if not filtered_contours:
+        return None, 0
+
+    detected_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    cv2.drawContours(detected_mask, filtered_contours, -1, 255, thickness=cv2.FILLED)
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    pixels = hsv[detected_mask > 0]
+    if pixels.size == 0:
+        return None, 0
+
+    hue_angles = pixels[:, 0].astype(np.float32) * (2.0 * np.pi / 180.0)
+    mean_sin = np.mean(np.sin(hue_angles))
+    mean_cos = np.mean(np.cos(hue_angles))
+    mean_hue = np.degrees(np.arctan2(mean_sin, mean_cos)) / 2.0
+    if mean_hue < 0:
+        mean_hue += 180.0
+
+    mean_sv = np.mean(pixels[:, 1:3], axis=0)
+    return (mean_hue, mean_sv[0], mean_sv[1]), len(pixels)
+
+
 def draw_overlay(frame, mask, color, center_x, area):
     overlay = frame.copy()
     _, height = metrics.picSize
@@ -80,6 +104,7 @@ def main():
             frame = metrics.frame.astype(np.uint8)
             mask = metrics.getImg_Mask(frame, args.color)
             center_x, area, contours = metrics.get_Cube_center_area(mask)
+            avg_hsv, hsv_pixel_count = average_hsv_in_detected_area(frame, contours)
 
             if area > args.stop_area:
                 print(f"[done] area {area:.0f} exceeded stop area {args.stop_area:.0f}")
@@ -92,11 +117,22 @@ def main():
             now = time.time()
             if now - last_print >= args.print_interval:
                 delta = metrics.pidController.u
+                hsv_text = (
+                    "None"
+                    if avg_hsv is None
+                    else "({:.1f}, {:.1f}, {:.1f}) n={}".format(
+                        avg_hsv[0],
+                        avg_hsv[1],
+                        avg_hsv[2],
+                        hsv_pixel_count,
+                    )
+                )
                 print(
-                    "t={:.2f}s center_x={} area={:.0f} pid_delta={:.2f} lspeed={:.3f} rspeed={:.3f}".format(
+                    "t={:.2f}s center_x={} area={:.0f} avg_hsv={} pid_delta={:.2f} lspeed={:.3f} rspeed={:.3f}".format(
                         now - start,
                         f"{center_x:.1f}" if area > 0 else "None",
                         area,
+                        hsv_text,
                         delta,
                         metrics.lspeed,
                         metrics.rspeed,
