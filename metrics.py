@@ -13,10 +13,10 @@ MODE_R = 1
 
 # 速度参数
 TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
-TURN_DUTY_FAST = 40     # 原地转弯速度（mode=='red'分支）
+TURN_DUTY_FAST = 20     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
 STRAIGHT_DUTY_FAST = 40 # 直行速度（mode=='red'分支）
-FORWARD_DUTY = 20       # forward()中的基础 duty
+FORWARD_DUTY = 40       # forward()中的基础 duty
 RATIO = 1.025           # 左右轮补偿比
 FINAL_RATIO = 1.04      # 最终冲线补偿比
 
@@ -26,7 +26,7 @@ SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
 SPEED_TARGET = 3
 SPEED_PID = {"P":3, "I":5, "D":60.0}
-FORWARD_PID = {"P":0.1, "I":0, "D":1}
+FORWARD_PID = {"P":0.1, "I":1, "D":1}
 ANGLE_FACTOR = 175
 SEARCH_TURN_ANGLE=45
 
@@ -518,7 +518,7 @@ def forward(center_x):
         if right < 0:
             right = 0
         set_motor_duty(left, right)
-    err = Center[0] - center_x
+    err = center_x - Center[0]
     delta = pidController.update(err)
     turn(FORWARD_DUTY, delta)
 
