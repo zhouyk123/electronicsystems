@@ -4,10 +4,12 @@ Manual test runner for one decomposed action in metrics.py.
 By default this is a dry run: it prints the primitive calls without touching
 GPIO, motors, camera, or real sleep.
 
-Examples:
-python3 test_one_decomposed_action.py _move_left --dist 1
+Examples
+python3 test_one_decomposed_action.py _move_forward --dist 2 --real
+python3 test_one_decomposed_action.py _move_left --dist 2 --real
+python3 test_one_decomposed_action.py _move_right --dist 2 --real
 python3 test_one_decomposed_action.py bypass_left --color red --dist 2
-python3 test_one_decomposed_action.py circle_clockwise --dist 1
+python3 test_one_decomposed_action.py circle_clockwise --dist 2 --real
 
 Run on the Raspberry Pi for real hardware movement:
 python3 test_one_decomposed_action.py _move_left --dist 1 --real

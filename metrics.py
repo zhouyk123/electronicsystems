@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 import threading as thd
 
 # ===== 关键参数 =====
-COLOR_SEQ = ["red", "green", "yellow"]
+COLOR_SEQ = ["red", "yellow", "yellow"]
 
 # 前进模式（朝前/朝后）
 MODE_ = 0  # 0, 1
@@ -14,19 +14,19 @@ MODE_L = 1  # 0, 1
 MODE_R = 1
 
 # 速度参数
+SPEED_TARGET = 1.5
 TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
 TURN_DUTY_FAST = 20     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
 STRAIGHT_DUTY_FAST = 40 # 直行速度（mode=='red'分支）
 FORWARD_DUTY = 15       # forward()中的基础 duty
 RATIO = 1.025           # 左右轮补偿比
-FINAL_RATIO = 1.04      # 最终冲线补偿比
+FINAL_RATIO = 1.025      # 最终冲线补偿比
 
 # 转向速度闭环参数（参考 pid_control.py）
 SPEED_SAMPLE_TIME = 0.05
 SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
-SPEED_TARGET = 3
 SPEED_PID = {"P":3, "I":5, "D":60.0}
 FORWARD_PID = {"P":0.005, "I":0.0, "D":0.0}
 ANGLE_FACTOR = 175
@@ -35,7 +35,7 @@ SEARCH_TURN_ANGLE=45
 # 面积阈值
 LEAST_AREA_FOLLOW = 1000       # 跟踪的最小面积
 LEAST_AREA_FIND_CUBE = 3000    # 找到魔方的最小面积
-AREA_FOR_TURN = 80000          # 接近魔方停车的面积
+AREA_FOR_TURN = 150000          # 接近魔方停车的面积
 LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
@@ -479,7 +479,7 @@ def brake(brake_time=BRAKE_TIME):
     time.sleep(brake_time)
     set_motor_duty(0, 0)
 
-def turn_left(duty=TURN_DUTY, angle=90):
+def turn_left(duty=TURN_DUTY, angle=74):
     init_counter()
     set_move_threshold(angle / ANGLE_FACTOR)
 
@@ -493,7 +493,7 @@ def turn_left(duty=TURN_DUTY, angle=90):
     moveDone.wait()
     brake()
 
-def turn_right(duty=TURN_DUTY, angle=90):
+def turn_right(duty=TURN_DUTY, angle=80):
     init_counter()
     set_move_threshold(angle / ANGLE_FACTOR)
 
@@ -549,18 +549,18 @@ def _move_forward(dist: float):
 
 
 def _move_left(dist: float):
-    turn_left(TURN_DUTY, 90)
+    turn_left()
     _rest()
     _move_forward(dist)
-    turn_right(TURN_DUTY, 90)
+    turn_right()
     _rest()
 
 
 def _move_right(dist: float):
-    turn_right(TURN_DUTY, 90)
+    turn_right()
     _rest()
     _move_forward(dist)
-    turn_left(TURN_DUTY, 90)
+    turn_left()
     _rest()
 
 
@@ -572,55 +572,72 @@ def approach_color(color: str):
 
 
 def _move_backward(dist: float):
-    turn_left(TURN_DUTY, 180)
+    turn_left()
     _rest()
     _move_forward(dist)
-    turn_left(TURN_DUTY, 180)
+    turn_left()
     _rest()
 
 
-def bypass_left(color: str, dist: int):
+def bypass_left():
     """
     从色块左侧绕过, 最后车头朝前
     """
-    approach_color(color)
-    _move_left(dist / 2)
-    _move_forward(dist)
-    _move_right(dist / 2)
+    _move_left(2)
+    _move_forward(5)
+    _move_right(2)
 
-def bypass_right(color: str, dist: int):
+def bypass_right():
     """
     从色块右侧绕过, 最后车头朝前
     """
-    approach_color(color)
-    _move_right(dist / 2)
-    _move_forward(dist)
-    _move_left(dist / 2)
+    _move_right(2)
+    _move_forward(5)
+    _move_left(2)
 
-def circle_clockwise(dist):
+def circle_clockwise():
     """
     顺时针绕色块 540 度
     即先向左 1/2 d，再向前 d, 向右 d, 向后 d, 向左 d, 向前 d，向右 1/2 d，最后车头朝前 
     """
-    _move_left(dist / 2)
-    _move_forward(dist)
-    _move_right(dist)
-    _move_backward(dist)
-    _move_left(dist)
-    _move_forward(dist)
-    _move_right(dist / 2)
+    turn_left()
+    _move_forward(2)
+    turn_right()
 
-def circle_anticlockwise(dist):
+    _move_forward(5)
+    turn_right()
+    _move_forward(5)
+    turn_right()
+    _move_forward(5)
+    turn_right()
+    _move_forward(5)
+    turn_right()
+    _move_forward(5)
+
+    _move_right(2)
+
+
+def circle_anticlockwise():
     """
     逆时针绕色块 540 度
     """
-    _move_right(dist / 2)
-    _move_forward(dist)
-    _move_left(dist)
-    _move_backward(dist)
-    _move_right(dist)
-    _move_forward(dist)
-    _move_left(dist / 2)
+    turn_right()
+    _move_forward(2)
+    turn_left()
+
+    _move_forward(5)
+    turn_left()
+    _move_forward(5)
+    turn_left()
+    _move_forward(5)
+    turn_left()
+    _move_forward(5)
+    turn_left()
+    _move_forward(5)
+    turn_left()
+    _move_forward(2)
+
+    turn_right()
 
 
 # ===== 完整流程 ======
@@ -628,13 +645,13 @@ def start_job():
     global COLOR_SEQ
 
     approach_color(COLOR_SEQ[0])
-    bypass_left(COLOR_SEQ[0], dist=5)
+    bypass_left()
 
     approach_color(COLOR_SEQ[1])
-    circle_anticlockwise(COLOR_SEQ[1], dist=5)
+    circle_anticlockwise()
 
     approach_color(COLOR_SEQ[2])
-    bypass_right(COLOR_SEQ[2], dist=5)
+    bypass_right()
 
     go_straight(dist=5)
 
@@ -654,6 +671,8 @@ if __name__ == '__main__':
     print(f"[初始化] PID控制器就绪 ({FORWARD_PID})")
 
     # 等待5秒，确保摄像头稳定出图
-    print("[初始化] 等待摄像头稳定(5秒)...")
-    time.sleep(5)
+    print("[初始化] 等待摄像头稳定(3秒)...")
+    time.sleep(3)
     print("[初始化] 初始化完成，开始执行任务")
+    
+    start_job()
