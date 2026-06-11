@@ -6,6 +6,8 @@ import RPi.GPIO as GPIO
 import threading as thd
 
 # ===== 关键参数 =====
+COLOR_SEQ = ["red", "green", "yellow"]
+
 # 前进模式（朝前/朝后）
 MODE_ = 0  # 0, 1
 MODE_L = 1  # 0, 1
@@ -40,6 +42,7 @@ LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 FIND_TURN_REST_TIME = 0
 INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
 FORWARD_CONTROL_PERIOD = 0.05
+BRAKE_TIME = 0.3           # 刹车时间
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
@@ -466,7 +469,7 @@ def stop(stop_time=0.5):
     set_motor_duty(0, 0)
     time.sleep(stop_time)
 
-def brake(brake_time=0.3):
+def brake(brake_time=BRAKE_TIME):
     set_turn_pid_mode(None)
     with motorLock:
         pwma.ChangeDutyCycle(100)
@@ -527,11 +530,114 @@ def forward(center_x):
 go_straight(duty, ratio, dist)
 turn_left(duty, angel)
 turn_right(duty, angle)
-detect_color(color)
+detected_color(color)
 forward_color(color)
 stop(stop_time)
 brake(brake_time)
 """
+
+
+# ===== 分解动作 =====
+
+def _rest():
+    time.sleep(INTERVAL_SLEEP_TIME)
+
+
+def _move_forward(dist: float):
+    go_straight(STRAIGHT_DUTY, RATIO, dist)
+    _rest()
+
+
+def _move_left(dist: float):
+    turn_left(TURN_DUTY, 90)
+    _rest()
+    _move_forward(dist)
+    turn_right(TURN_DUTY, 90)
+    _rest()
+
+
+def _move_right(dist: float):
+    turn_right(TURN_DUTY, 90)
+    _rest()
+    _move_forward(dist)
+    turn_left(TURN_DUTY, 90)
+    _rest()
+
+
+def approach_color(color: str):
+    detected_color(color)
+    forward_color(color)
+    stop()
+    _rest()
+
+
+def _move_backward(dist: float):
+    turn_left(TURN_DUTY, 180)
+    _rest()
+    _move_forward(dist)
+    turn_left(TURN_DUTY, 180)
+    _rest()
+
+
+def bypass_left(color: str, dist: int):
+    """
+    从色块左侧绕过, 最后车头朝前
+    """
+    approach_color(color)
+    _move_left(dist / 2)
+    _move_forward(dist)
+    _move_right(dist / 2)
+
+def bypass_right(color: str, dist: int):
+    """
+    从色块右侧绕过, 最后车头朝前
+    """
+    approach_color(color)
+    _move_right(dist / 2)
+    _move_forward(dist)
+    _move_left(dist / 2)
+
+def circle_clockwise(dist):
+    """
+    顺时针绕色块 540 度
+    即先向左 1/2 d，再向前 d, 向右 d, 向后 d, 向左 d, 向前 d，向右 1/2 d，最后车头朝前 
+    """
+    _move_left(dist / 2)
+    _move_forward(dist)
+    _move_right(dist)
+    _move_backward(dist)
+    _move_left(dist)
+    _move_forward(dist)
+    _move_right(dist / 2)
+
+def circle_anticlockwise(dist):
+    """
+    逆时针绕色块 540 度
+    """
+    _move_right(dist / 2)
+    _move_forward(dist)
+    _move_left(dist)
+    _move_backward(dist)
+    _move_right(dist)
+    _move_forward(dist)
+    _move_left(dist / 2)
+
+
+# ===== 完整流程 ======
+def start_job():
+    global COLOR_SEQ
+
+    approach_color(COLOR_SEQ[0])
+    bypass_left(COLOR_SEQ[0], dist=5)
+
+    approach_color(COLOR_SEQ[1])
+    circle_anticlockwise(COLOR_SEQ[1], dist=5)
+
+    approach_color(COLOR_SEQ[2])
+    bypass_right(COLOR_SEQ[2], dist=5)
+
+    go_straight(dist=5)
+
 
 
 if __name__ == '__main__':
