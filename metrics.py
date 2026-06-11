@@ -185,6 +185,15 @@ def get_Cube_center_area(img_Mask):
     return center_x, area, contours
 
 
+def show_tracking_area(color, area, center_x=0):
+    display = frame.copy()
+    text = f"{color} area: {area:.0f}"
+    cv2.putText(display, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+    if area > 0:
+        cv2.line(display, (int(center_x), 0), (int(center_x), Height), (0, 0, 255), 2)
+    cv2.imshow("Current", display)
+
+
 def detected_color(color):
     try:
         img = frame.astype(np.uint8)
@@ -199,9 +208,9 @@ def detected_color(color):
                 time.sleep(FIND_TURN_REST_TIME)
                 img = frame.astype(np.uint8)
                 img_Mask = getImg_Mask(img, color)
-                cv2.imshow("Current", frame)
-                cv2.waitKey(WAIT_EVERY_TURN)
                 center, area, edge = get_Cube_center_area(img_Mask)
+                show_tracking_area(color, area, center)
+                cv2.waitKey(WAIT_EVERY_TURN)
                 if (area > LEAST_AREA_FIND_CUBE):
                     flag = 1
                     break
@@ -222,7 +231,7 @@ def forward_color(color):
         img = frame.astype(np.uint8)
         img_Mask = getImg_Mask(img, color)
         center_x, area, edge = get_Cube_center_area(img_Mask)
-        cv2.imshow("Current", frame)
+        show_tracking_area(color, area, center_x)
         cv2.waitKey(1)
         if area > AREA_FOR_TURN:
             stop()
