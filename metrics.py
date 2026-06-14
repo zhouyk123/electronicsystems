@@ -14,7 +14,7 @@ MODE_L = 1  # 0, 1
 MODE_R = 1
 
 # 速度参数
-SPEED_TARGET = 1.5
+SPEED_TARGET = 2.0
 TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
 TURN_DUTY_FAST = 20     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
@@ -28,14 +28,14 @@ SPEED_SAMPLE_TIME = 0.05
 SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
 SPEED_PID = {"P":3, "I":5, "D":60.0}
-FORWARD_PID = {"P":0.005, "I":0.0, "D":0.0}
+FORWARD_PID = {"P":0.02, "I":0.0, "D":0.0}
 ANGLE_FACTOR = 175
-SEARCH_TURN_ANGLE=45
+SEARCH_TURN_ANGLE=30
 
 # 面积阈值
 LEAST_AREA_FOLLOW = 1000       # 跟踪的最小面积
-LEAST_AREA_FIND_CUBE = 3000    # 找到魔方的最小面积
-AREA_FOR_TURN = 80000          # 接近魔方停车的面积
+LEAST_AREA_FIND_CUBE = 1500    # 找到魔方的最小面积
+AREA_FOR_TURN = 70000          # 接近魔方停车的面积
 LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
@@ -126,8 +126,8 @@ low_red2 = np.array([165, 70, 80])
 high_red2 = np.array([180, 255, 255])
 low_yellow = np.array([25, 80, 100])
 high_yellow = np.array([35, 255, 255])
-low_green = np.array([40,70, 70])
-high_green = np.array([75, 255, 255])
+low_green = np.array([35,70, 70])
+high_green = np.array([70, 255, 255])
 
 
 def getImg_Mask(img, color):
@@ -608,7 +608,7 @@ def bypass_left():
     从色块左侧绕过, 最后车头朝前
     """
     turn_left()
-    circle(dv=0.2, dist=8.5)
+    circle(dv=0.266, dist=8.2)
     turn_left()
 
 def bypass_right():
@@ -616,7 +616,7 @@ def bypass_right():
     从色块右侧绕过, 最后车头朝前
     """
     turn_right()
-    circle(dv=-0.2, dist=8.5)
+    circle(dv=-0.266, dist=8.5)
     turn_right()
 
 def circle_clockwise():
@@ -625,7 +625,7 @@ def circle_clockwise():
     即先向左 1/2 d，再向前 d, 向右 d, 向后 d, 向左 d, 向前 d，向右 1/2 d，最后车头朝前 
     """
     turn_left()
-    circle(dv=0.2, dist=24)
+    circle(dv=0.266, dist=26)
     turn_left()
 
 
@@ -634,7 +634,7 @@ def circle_anticlockwise():
     逆时针绕色块 540 度
     """
     turn_right()
-    circle(dv=-0.2, dist=24)
+    circle(dv=-0.266, dist=26)
     turn_right()
 
 
@@ -651,7 +651,7 @@ def start_job():
     approach_color(COLOR_SEQ[2])
     bypass_right()
 
-    go_straight(dist=5)
+    _move_forward(dist=5)
 
 
 
