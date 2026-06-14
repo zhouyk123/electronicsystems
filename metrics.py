@@ -29,7 +29,6 @@ SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
 SPEED_PID = {"P":3, "I":5, "D":60.0}
 FORWARD_PID = {"P":0.005, "I":0.0, "D":0.0}
-CENTER_PID = {"P":0.005, "I":0.1, "D":0.0}
 ANGLE_FACTOR = 175
 SEARCH_TURN_ANGLE=45
 
@@ -45,7 +44,6 @@ INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
 FORWARD_CONTROL_PERIOD = 0.05
 BRAKE_TIME = 0.3           # 刹车时间
 CENTER_TOLERANCE = 10      # 色块居中允许的像素误差
-CENTER_PID_LIMIT = 50      # centor_color()的最大转向占空比
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
@@ -225,7 +223,6 @@ def detected_color(color):
                 print("Fail to find cube")
                 exit()
         print(f"Find {color}")
-        centor_color(color)
     except KeyboardInterrupt:
         exit()
 
@@ -481,7 +478,7 @@ def go_straight(duty, ratio=RATIO, dist=1):
     moveDone.wait()
     brake()
 
-def circle(v_target=SPEED_TARGET, dv=0, dist=1, duty=FORWARD_DUTY):
+def circle(v_target=SPEED_TARGET, dv=0, dist=17, duty=FORWARD_DUTY):
     left_target = v_target + dv
     right_target = v_target - dv
     if v_target <= 0:
@@ -565,59 +562,6 @@ def forward(center_x):
     delta = pidController.update(err)
     turn(FORWARD_DUTY, delta)
 
-def centor_color(color, error=CENTER_TOLERANCE, timeout=None):
-    global centerPidController
-
-    def turn(duty, delta):
-        set_turn_pid_mode(None)
-        set_motor_mode(left_pin, MODE_L)
-        set_motor_mode(right_pin, MODE_R)
-        left = duty - delta
-        right = duty + delta
-        if left > 100:
-            left = 100
-        if left < 0:
-            left = 0
-        if right > 100:
-            right = 100
-        if right < 0:
-            right = 0
-        set_motor_duty(left, right)
-
-    if centerPidController is None:
-        centerPidController = WheelSpeedPID(
-            **CENTER_PID,
-            target=0,
-            lb=-CENTER_PID_LIMIT,
-            ub=CENTER_PID_LIMIT,
-        )
-
-    print("centering ", color)
-    start_time = time.time()
-    while True:
-        loop_start = time.time()
-        img = frame.astype(np.uint8)
-        img_Mask = getImg_Mask(img, color)
-        center_x, area, edge = get_Cube_center_area(img_Mask)
-        show_tracking_area(color, area, center_x)
-        cv2.waitKey(1)
-
-        if area >= LEAST_AREA_FOLLOW:
-            err = center_x - Center[0]
-            if abs(err) < error:
-                stop(0)
-                break
-            delta = centerPidController.update(err)
-            turn(0, delta)
-        else:
-            stop(0)
-
-        if timeout is not None and time.time() - start_time >= timeout:
-            stop(0)
-            break
-
-        elapsed = time.time() - loop_start
-        time.sleep(max(0, FORWARD_CONTROL_PERIOD - elapsed))
 
 """
 所有可用的动作：
@@ -644,22 +588,6 @@ def _move_forward(dist: float):
     _rest()
 
 
-def _move_left(dist: float):
-    turn_left()
-    _rest()
-    _move_forward(dist)
-    turn_right()
-    _rest()
-
-
-def _move_right(dist: float):
-    turn_right()
-    _rest()
-    _move_forward(dist)
-    turn_left()
-    _rest()
-
-
 def approach_color(color: str):
     detected_color(color)
     forward_color(color)
@@ -679,17 +607,17 @@ def bypass_left():
     """
     从色块左侧绕过, 最后车头朝前
     """
-    _move_left(2)
-    _move_forward(4)
-    _move_right(2)
+    turn_left()
+    circle(dv=0.2, dist=8.5)
+    turn_left()
 
 def bypass_right():
     """
     从色块右侧绕过, 最后车头朝前
     """
-    _move_right(2)
-    _move_forward(4)
-    _move_left(2)
+    turn_right()
+    circle(dv=-0.2, dist=8.5)
+    turn_right()
 
 def circle_clockwise():
     """
@@ -697,20 +625,8 @@ def circle_clockwise():
     即先向左 1/2 d，再向前 d, 向右 d, 向后 d, 向左 d, 向前 d，向右 1/2 d，最后车头朝前 
     """
     turn_left()
-    _move_forward(2)
-    turn_right()
-
-    _move_forward(4)
-    turn_right()
-    _move_forward(4)
-    turn_right()
-    _move_forward(4)
-    turn_right()
-    _move_forward(4)
-    turn_right()
-    _move_forward(4)
-
-    _move_right(2)
+    circle(dv=0.2, dist=24)
+    turn_left()
 
 
 def circle_anticlockwise():
@@ -718,21 +634,7 @@ def circle_anticlockwise():
     逆时针绕色块 540 度
     """
     turn_right()
-    _move_forward(2)
-    turn_left()
-
-    _move_forward(4)
-    turn_left()
-    _move_forward(4)
-    turn_left()
-    _move_forward(4)
-    turn_left()
-    _move_forward(4)
-    turn_left()
-    _move_forward(4)
-    turn_left()
-    _move_forward(2)
-
+    circle(dv=-0.2, dist=24)
     turn_right()
 
 
@@ -764,14 +666,6 @@ if __name__ == '__main__':
 
     # 初始化PID控制器，用于前进时的方向修正
     pidController = WheelSpeedPID(**FORWARD_PID, target=0, lb=-8, ub=8)
-    print(f"[初始化] PID控制器就绪 ({FORWARD_PID})")
-    centerPidController = WheelSpeedPID(
-        **CENTER_PID,
-        target=0,
-        lb=-CENTER_PID_LIMIT,
-        ub=CENTER_PID_LIMIT,
-    )
-    print(f"[初始化] 居中PID控制器就绪 ({CENTER_PID}, limit={CENTER_PID_LIMIT})")
 
     # 等待5秒，确保摄像头稳定出图
     print("[初始化] 等待摄像头稳定(3秒)...")
