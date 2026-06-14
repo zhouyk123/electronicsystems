@@ -6,13 +6,12 @@ GPIO, motors, camera, or real sleep.
 
 Examples
 python3 test_one_decomposed_action.py _move_forward --dist 2 --real
-python3 test_one_decomposed_action.py _move_left --dist 2 --real
-python3 test_one_decomposed_action.py _move_right --dist 2 --real
-python3 test_one_decomposed_action.py bypass_left --color red --dist 2
-python3 test_one_decomposed_action.py circle_clockwise --dist 2 --real
+python3 test_one_decomposed_action.py _move_backward --dist 2 --real
+python3 test_one_decomposed_action.py bypass_left --real
+python3 test_one_decomposed_action.py circle_clockwise --real
 
 Run on the Raspberry Pi for real hardware movement:
-python3 test_one_decomposed_action.py _move_left --dist 1 --real
+python3 test_one_decomposed_action.py _move_forward --dist 1 --real
 python3 test_one_decomposed_action.py approach_color --color red --real
 """
 
@@ -25,8 +24,6 @@ import types
 ACTION_NAMES = [
     "_rest",
     "_move_forward",
-    "_move_left",
-    "_move_right",
     "_move_backward",
     "approach_color",
     "bypass_left",
@@ -35,26 +32,28 @@ ACTION_NAMES = [
     "circle_anticlockwise",
 ]
 
-COLOR_ACTIONS = {"approach_color", "bypass_left", "bypass_right"}
+COLOR_ACTIONS = {"approach_color"}
 DIST_ACTIONS = {
     "_move_forward",
-    "_move_left",
-    "_move_right",
     "_move_backward",
+}
+CAMERA_ACTIONS = {"approach_color"}
+MOTION_ACTIONS = {
+    "_move_forward",
+    "_move_backward",
+    "approach_color",
     "bypass_left",
     "bypass_right",
     "circle_clockwise",
     "circle_anticlockwise",
 }
-CAMERA_ACTIONS = {"approach_color", "bypass_left", "bypass_right"}
-MOTION_ACTIONS = DIST_ACTIONS | CAMERA_ACTIONS
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Manually run one decomposed action.")
     parser.add_argument("action", choices=ACTION_NAMES)
     parser.add_argument("--color", choices=["red", "yellow", "green"], default="red")
-    parser.add_argument("--dist", type=float, default=1.0)
+    parser.add_argument("--dist", type=float, default=1.0, help="Distance for _move_forward/_move_backward.")
     parser.add_argument("--real", action="store_true", help="Actually run motors/camera on Raspberry Pi.")
     parser.add_argument("--camera-wait", type=float, default=5.0)
     parser.add_argument("--turn-duty", type=float, help="Override metrics.TURN_DUTY for this run.")
@@ -176,6 +175,7 @@ def patch_dry_run(metrics):
     metrics.go_straight = trace("go_straight")
     metrics.turn_left = trace("turn_left")
     metrics.turn_right = trace("turn_right")
+    metrics.circle = trace("circle")
     metrics.detected_color = trace("detected_color")
     metrics.forward_color = trace("forward_color")
     metrics.stop = trace("stop")
@@ -211,9 +211,7 @@ def prepare_real_run(metrics, args):
 
 def run_action(metrics, args):
     action = getattr(metrics, args.action)
-    if args.action in COLOR_ACTIONS and args.action in DIST_ACTIONS:
-        action(args.color, args.dist)
-    elif args.action in COLOR_ACTIONS:
+    if args.action in COLOR_ACTIONS:
         action(args.color)
     elif args.action in DIST_ACTIONS:
         action(args.dist)
