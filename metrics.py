@@ -29,6 +29,7 @@ SPEED_PULSE_PER_REV = 585.0
 TURN_SPEED_TARGET = 0.8
 SPEED_PID = {"P":3, "I":5, "D":60.0}
 FORWARD_PID = {"P":0.005, "I":0.0, "D":0.0}
+CENTER_PID = {"P":0.005, "I":0.0, "D":0.0}
 ANGLE_FACTOR = 175
 SEARCH_TURN_ANGLE=45
 
@@ -43,6 +44,8 @@ FIND_TURN_REST_TIME = 0
 INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
 FORWARD_CONTROL_PERIOD = 0.05
 BRAKE_TIME = 0.3           # 刹车时间
+CENTER_TOLERANCE = 10      # 色块居中允许的像素误差
+CENTER_PID_LIMIT = 30      # centor_color()的最大转向占空比
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
@@ -78,6 +81,7 @@ turnPidMode = None
 turnPidController_left = None
 turnPidController_right = None
 turnPidGeneration = 0
+centerPidController = None
 
 def picShoot():
     global frame, cap, fpsCount, getPic
@@ -221,6 +225,7 @@ def detected_color(color):
                 print("Fail to find cube")
                 exit()
         print(f"Find {color}")
+        centor_color(color)
     except KeyboardInterrupt:
         exit()
 
@@ -560,6 +565,60 @@ def forward(center_x):
     delta = pidController.update(err)
     turn(FORWARD_DUTY, delta)
 
+def centor_color(color, error=CENTER_TOLERANCE, timeout=None):
+    global centerPidController
+
+    def turn(duty, delta):
+        set_turn_pid_mode(None)
+        set_motor_mode(left_pin, MODE_L)
+        set_motor_mode(right_pin, MODE_R)
+        left = duty - delta
+        right = duty + delta
+        if left > 100:
+            left = 100
+        if left < 0:
+            left = 0
+        if right > 100:
+            right = 100
+        if right < 0:
+            right = 0
+        set_motor_duty(left, right)
+
+    if centerPidController is None:
+        centerPidController = WheelSpeedPID(
+            **CENTER_PID,
+            target=0,
+            lb=-CENTER_PID_LIMIT,
+            ub=CENTER_PID_LIMIT,
+        )
+
+    print("centering ", color)
+    start_time = time.time()
+    while True:
+        loop_start = time.time()
+        img = frame.astype(np.uint8)
+        img_Mask = getImg_Mask(img, color)
+        center_x, area, edge = get_Cube_center_area(img_Mask)
+        show_tracking_area(color, area, center_x)
+        cv2.waitKey(1)
+
+        if area >= LEAST_AREA_FOLLOW:
+            err = center_x - Center[0]
+            if abs(err) < error:
+                stop(0)
+                break
+            delta = centerPidController.update(err)
+            turn(0, delta)
+        else:
+            stop(0)
+
+        if timeout is not None and time.time() - start_time >= timeout:
+            stop(0)
+            break
+
+        elapsed = time.time() - loop_start
+        time.sleep(max(0, FORWARD_CONTROL_PERIOD - elapsed))
+
 """
 所有可用的动作：
 go_straight(duty, ratio, dist)
@@ -568,6 +627,7 @@ turn_left(duty, angel)
 turn_right(duty, angle)
 detected_color(color)
 forward_color(color)
+centor_color(color)
 stop(stop_time)
 brake(brake_time)
 """
@@ -705,6 +765,13 @@ if __name__ == '__main__':
     # 初始化PID控制器，用于前进时的方向修正
     pidController = WheelSpeedPID(**FORWARD_PID, target=0, lb=-8, ub=8)
     print(f"[初始化] PID控制器就绪 ({FORWARD_PID})")
+    centerPidController = WheelSpeedPID(
+        **CENTER_PID,
+        target=0,
+        lb=-CENTER_PID_LIMIT,
+        ub=CENTER_PID_LIMIT,
+    )
+    print(f"[初始化] 居中PID控制器就绪 ({CENTER_PID}, limit={CENTER_PID_LIMIT})")
 
     # 等待5秒，确保摄像头稳定出图
     print("[初始化] 等待摄像头稳定(3秒)...")
