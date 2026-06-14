@@ -1,10 +1,11 @@
 """
-Independent test for go_straight(), turn_left(), and turn_right().
+Independent test for go_straight(), turn_left(), turn_right(), and circle().
 
 Examples:
 python3 test_motion_actions.py straight --duty 20 --dist 1 --timeout 5
 python3 test_motion_actions.py left --duty 20 --angle 90 --timeout 5
 python3 test_motion_actions.py right --duty 20 --angle 90 --timeout 5
+python3 test_motion_actions.py circle --v-target 1.5 --dv 0.3 --dist 1 --timeout 5
 """
 
 import argparse
@@ -28,11 +29,14 @@ def read_state():
 
 def main():
     parser = argparse.ArgumentParser(description="Run one motion action with live counters.")
-    parser.add_argument("action", choices=["straight", "left", "right"])
+    parser.add_argument("action", choices=["straight", "left", "right", "circle"])
     parser.add_argument("--duty", type=float, default=metrics.TURN_DUTY)
     parser.add_argument("--ratio", type=float, default=metrics.RATIO)
-    parser.add_argument("--dist", type=float, default=1.0, help="Revolutions used by go_straight().")
+    parser.add_argument("--dist", type=float, default=1.0, help="Revolutions used by go_straight() and circle().")
     parser.add_argument("--angle", type=float, default=90.0, help="Degrees used by turn_left/right().")
+    parser.add_argument("--v-target", type=float, default=metrics.SPEED_TARGET, help="Average wheel speed target for circle().")
+    parser.add_argument("--dv", type=float, default=0.2, help="Wheel speed offset for circle(): left=v_target+dv, right=v_target-dv.")
+    parser.add_argument("--circle-duty", type=float, default=metrics.FORWARD_DUTY, help="Initial duty used by circle().")
     parser.add_argument("--timeout", type=float, default=6.0)
     parser.add_argument("--print-interval", type=float, default=0.1)
     args = parser.parse_args()
@@ -45,8 +49,10 @@ def main():
                 metrics.go_straight(args.duty, args.ratio, args.dist)
             elif args.action == "left":
                 metrics.turn_left(args.duty, args.angle)
-            else:
+            elif args.action == "right":
                 metrics.turn_right(args.duty, args.angle)
+            else:
+                metrics.circle(args.v_target, args.dv, args.dist, args.circle_duty)
         except BaseException as exc:
             error.append(exc)
 

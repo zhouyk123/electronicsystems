@@ -75,7 +75,6 @@ motorLock = thd.Lock()
 turnPidLock = thd.Lock()
 moveDone = thd.Event()
 turnPidMode = None
-turnPidController = None
 turnPidController_left = None
 turnPidController_right = None
 turnPidGeneration = 0
@@ -100,7 +99,7 @@ def picShoot():
 
 picGet = thd.Thread(target=picShoot)
 
-def speed_callback(channel):
+def speed_callback(channel):  # 检测马达旋转量是否达到触发阈值
     global speed_lcounter, speed_rcounter, move_lcounter, move_rcounter, threshold, triggered
     with speedLock:
         if channel == LS:
@@ -271,7 +270,7 @@ def speedShoot():
             right_controller = turnPidController_right
             generation = turnPidGeneration
 
-        if mode in ("left", "right", "straight") and left_controller and right_controller:
+        if mode in ("left", "right", "straight", "circle") and left_controller and right_controller:
             right_duty = right_controller.update(rspeed)
             left_duty = left_controller.update(lspeed)
             with motorLock:
@@ -439,27 +438,29 @@ class WheelSpeedPID:
         return self.u
 
 
-def set_turn_pid_mode(mode, duty=0, ratio=1):
-    global turnPidMode, turnPidController, turnPidController_left, turnPidController_right, turnPidGeneration
+def set_turn_pid_mode(mode, duty=0, ratio=1, left_target=None, right_target=None):
+    global turnPidMode, turnPidController_left, turnPidController_right, turnPidGeneration
     with turnPidLock:
         turnPidGeneration += 1
         if mode is None:
             turnPidMode = None
-            turnPidController = None
             turnPidController_left = None
             turnPidController_right = None
             return
 
         if mode in ('left', 'right'):
             target_speed = TURN_SPEED_TARGET
-            turnPidController = None
             turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
             turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed)
         elif mode == 'straight':
             target_speed = SPEED_TARGET
-            turnPidController = None
             turnPidController_left = WheelSpeedPID(**SPEED_PID, target=target_speed)
             turnPidController_right = WheelSpeedPID(**SPEED_PID, target=target_speed * ratio)
+        elif mode == 'circle':
+            if left_target is None or right_target is None:
+                raise ValueError("circle mode requires left_target and right_target")
+            turnPidController_left = WheelSpeedPID(**SPEED_PID, target=left_target)
+            turnPidController_right = WheelSpeedPID(**SPEED_PID, target=right_target)
         turnPidMode = mode
 
 
@@ -471,6 +472,27 @@ def go_straight(duty, ratio=RATIO, dist=1):
     set_motor_mode(right_pin, MODE_R)
     set_motor_duty(duty, duty*ratio)
     set_turn_pid_mode('straight', duty, ratio)
+
+    moveDone.wait()
+    brake()
+
+def circle(v_target=SPEED_TARGET, dv=0, dist=1, duty=FORWARD_DUTY):
+    left_target = v_target + dv
+    right_target = v_target - dv
+    if v_target <= 0:
+        raise ValueError("v_target must be greater than 0")
+    if left_target < 0 or right_target < 0:
+        raise ValueError("v_target + dv and v_target - dv must be non-negative")
+
+    init_counter()
+    set_move_threshold(dist)
+
+    set_motor_mode(left_pin, MODE_L)
+    set_motor_mode(right_pin, MODE_R)
+    left_duty = max(0, min(100, duty * left_target / v_target))
+    right_duty = max(0, min(100, duty * right_target / v_target))
+    set_motor_duty(left_duty, right_duty)
+    set_turn_pid_mode('circle', left_target=left_target, right_target=right_target)
 
     moveDone.wait()
     brake()
@@ -541,6 +563,7 @@ def forward(center_x):
 """
 所有可用的动作：
 go_straight(duty, ratio, dist)
+circle(v_target, dv, dist, duty)
 turn_left(duty, angel)
 turn_right(duty, angle)
 detected_color(color)

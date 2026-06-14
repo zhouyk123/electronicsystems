@@ -34,17 +34,23 @@ def main():
         start = time.time()
         while time.time() - start < args.time:
             with metrics.turnPidLock:
-                controller = metrics.turnPidController
-                pid_u = controller.u if controller else 0
-                target_speed = controller.target_speed if controller else 0
+                left_controller = metrics.turnPidController_left
+                right_controller = metrics.turnPidController_right
+                left_pid_u = left_controller.u if left_controller else 0
+                right_pid_u = right_controller.u if right_controller else 0
+                left_target = left_controller.target if left_controller else 0
+                right_target = right_controller.target if right_controller else 0
 
             print(
-                "t={:.2f}s target={:.3f} lspeed={:.3f} rspeed={:.3f} pid_duty={:.2f}".format(
+                "t={:.2f}s ltarget={:.3f} rtarget={:.3f} "
+                "lspeed={:.3f} rspeed={:.3f} lpid_duty={:.2f} rpid_duty={:.2f}".format(
                     time.time() - start,
-                    target_speed,
+                    left_target,
+                    right_target,
                     metrics.lspeed,
                     metrics.rspeed,
-                    pid_u,
+                    left_pid_u,
+                    right_pid_u,
                 )
             )
             time.sleep(args.interval)
