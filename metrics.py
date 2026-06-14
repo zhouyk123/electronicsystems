@@ -45,7 +45,7 @@ INTERVAL_SLEEP_TIME = 1    # 操作间休息时间
 FORWARD_CONTROL_PERIOD = 0.05
 BRAKE_TIME = 0.3           # 刹车时间
 CENTER_TOLERANCE = 10      # 色块居中允许的像素误差
-CENTER_PID_LIMIT = 30      # centor_color()的最大转向占空比
+CENTER_PID_LIMIT = 50      # centor_color()的最大转向占空比
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
