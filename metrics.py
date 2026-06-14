@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 import threading as thd
 
 # ===== 关键参数 =====
-COLOR_SEQ = ["red", "yellow", "yellow"]
+COLOR_SEQ = ["red", "yellow", "green"]
 
 # 前进模式（朝前/朝后）
 MODE_ = 0  # 0, 1
@@ -19,8 +19,8 @@ TURN_DUTY = 0          # 原地转弯速度（mode=='green'分支）
 TURN_DUTY_FAST = 20     # 原地转弯速度（mode=='red'分支）
 STRAIGHT_DUTY = 20      # 直行速度（mode=='green'分支）
 STRAIGHT_DUTY_FAST = 40 # 直行速度（mode=='red'分支）
-FORWARD_DUTY = 15       # forward()中的基础 duty
-RATIO = 1.025           # 左右轮补偿比
+FORWARD_DUTY = 25       # forward()中的基础 duty
+RATIO = 1.01           # 左右轮补偿比
 FINAL_RATIO = 1.025      # 最终冲线补偿比
 
 # 转向速度闭环参数（参考 pid_control.py）
@@ -35,7 +35,7 @@ SEARCH_TURN_ANGLE=45
 # 面积阈值
 LEAST_AREA_FOLLOW = 1000       # 跟踪的最小面积
 LEAST_AREA_FIND_CUBE = 3000    # 找到魔方的最小面积
-AREA_FOR_TURN = 150000          # 接近魔方停车的面积
+AREA_FOR_TURN = 80000          # 接近魔方停车的面积
 LEAST_AREA_PASS_YELLOW = 1000  # 经过黄色的最小面积
 
 # 时间参数（mode=='green' 分支）
@@ -46,7 +46,7 @@ BRAKE_TIME = 0.3           # 刹车时间
 
 # 搜索参数
 MAX_TURN_COUNT = 80        # 最大搜索转动次数
-WAIT_EVERY_TURN = 0        # 0 for waiting for keyboard input and n >= 0 for waiting for n ms
+WAIT_EVERY_TURN = 200        # 0 for waiting for keyboard input and n >= 0 for waiting for n ms
 
 # ===== 摄像头图像获取线程 =====
 
@@ -195,6 +195,7 @@ def show_tracking_area(color, area, center_x=0):
 
 
 def detected_color(color):
+    print("detecting ", color)
     try:
         img = frame.astype(np.uint8)
         img_Mask = getImg_Mask(img, color)
@@ -226,6 +227,7 @@ def detected_color(color):
 
 
 def forward_color(color):
+    print("forward ", color)
     while True:
         loop_start = time.time()
         img = frame.astype(np.uint8)
@@ -488,7 +490,7 @@ def brake(brake_time=BRAKE_TIME):
     time.sleep(brake_time)
     set_motor_duty(0, 0)
 
-def turn_left(duty=TURN_DUTY, angle=74):
+def turn_left(duty=TURN_DUTY, angle=77):
     init_counter()
     set_move_threshold(angle / ANGLE_FACTOR)
 
@@ -519,6 +521,8 @@ def turn_right(duty=TURN_DUTY, angle=80):
 def forward(center_x):
     def turn(duty, delta):
         set_turn_pid_mode(None)
+        set_motor_mode(left_pin, MODE_L)
+        set_motor_mode(right_pin, MODE_R)
         left = duty - delta
         right = duty + delta
         if left > 100:
@@ -593,7 +597,7 @@ def bypass_left():
     从色块左侧绕过, 最后车头朝前
     """
     _move_left(2)
-    _move_forward(5)
+    _move_forward(4)
     _move_right(2)
 
 def bypass_right():
@@ -601,7 +605,7 @@ def bypass_right():
     从色块右侧绕过, 最后车头朝前
     """
     _move_right(2)
-    _move_forward(5)
+    _move_forward(4)
     _move_left(2)
 
 def circle_clockwise():
@@ -613,15 +617,15 @@ def circle_clockwise():
     _move_forward(2)
     turn_right()
 
-    _move_forward(5)
+    _move_forward(4)
     turn_right()
-    _move_forward(5)
+    _move_forward(4)
     turn_right()
-    _move_forward(5)
+    _move_forward(4)
     turn_right()
-    _move_forward(5)
+    _move_forward(4)
     turn_right()
-    _move_forward(5)
+    _move_forward(4)
 
     _move_right(2)
 
@@ -634,15 +638,15 @@ def circle_anticlockwise():
     _move_forward(2)
     turn_left()
 
-    _move_forward(5)
+    _move_forward(4)
     turn_left()
-    _move_forward(5)
+    _move_forward(4)
     turn_left()
-    _move_forward(5)
+    _move_forward(4)
     turn_left()
-    _move_forward(5)
+    _move_forward(4)
     turn_left()
-    _move_forward(5)
+    _move_forward(4)
     turn_left()
     _move_forward(2)
 
