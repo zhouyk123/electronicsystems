@@ -2,7 +2,7 @@
 
 电子系统课程项目代码。项目主要面向 Raspberry Pi 小车：通过摄像头识别红、黄、绿色色块，结合 GPIO 电机控制、编码器计数和 PID 闭环，让小车完成搜索色块、靠近色块、绕行色块和最终前进的任务流程。
 
-当前主程序是 `metrics.py`。`metrics_legacy.py` 是旧版实现，`pid_control.py` 是独立的速度 PID 调试脚本，其余 `test_*.py` 文件用于分模块调试或辅助验证。
+当前主程序是 `metrics.py`。`pid_control.py` 是独立的速度 PID 调试脚本，其余 `test_*.py` 文件用于分模块调试或辅助验证。
 
 ## 功能概览
 
@@ -19,14 +19,13 @@
 | 文件 | 说明 |
 | --- | --- |
 | `metrics.py` | 主程序，包含图像处理、GPIO 初始化、电机控制、PID 控制和完整任务流程 |
-| `metrics_legacy.py` | 旧版主程序，保留用于对照 |
 | `pid_control.py` | 独立的电机速度 PID 调试脚本 |
 | `test_visual_center_area.py` | 实时显示颜色 mask、轮廓、中心线和面积 |
 | `test_detect_color.py` | 单独测试指定颜色的搜索逻辑 |
 | `test_forward_color.py` | 单独测试识别目标后的前进跟随逻辑 |
 | `test_motion_actions.py` | 单独测试直行、左转、右转和绕圈等底层动作 |
 | `test_one_decomposed_action.py` | 单独执行一个组合动作，默认 dry-run，不触碰真实硬件 |
-| `test_decomposed_actions.py` | 组合动作的单元测试；当前部分断言仍按旧接口编写，使用前需要和 `metrics.py` 同步 |
+| `test_decomposed_actions.py` | 组合动作的单元测试；当前部分断言需要和 `metrics.py` 同步 |
 | `test_turn_pid.py` | 转向 PID 实测脚本 |
 
 ## 运行环境
@@ -201,4 +200,4 @@ python3 test_one_decomposed_action.py approach_color --color red --real
 - 真实运行前请确认小车悬空或处于安全测试区域，尤其是首次调 PID、方向和编码器参数时。
 - 如果动作一直不结束，通常优先检查编码器信号、`SPEED_PULSE_PER_REV`、`ANGLE_FACTOR` 和 `threshold` 是否合理。
 - 如果目标识别不稳定，优先使用 `test_visual_center_area.py` 调整 HSV 阈值和面积阈值。
-- `test_decomposed_actions.py` 当前与 `metrics.py` 的部分组合动作接口不一致，作为旧测试参考使用前需要更新。
+- `test_decomposed_actions.py` 当前与 `metrics.py` 的部分组合动作接口不一致，使用前需要更新。
