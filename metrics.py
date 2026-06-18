@@ -619,6 +619,13 @@ def bypass_right():
     circle(dv=-0.266, dist=8.5)
     turn_right()
 
+def bypass_right_quarter():
+    """
+    1/4 圈
+    """
+    turn_right()
+    circle(dv=-0.266, dist=4.2)
+
 def circle_clockwise():
     """
     顺时针绕色块 540 度
@@ -649,9 +656,10 @@ def start_job():
     circle_anticlockwise()
 
     approach_color(COLOR_SEQ[2])
-    bypass_right()
+    # bypass_right()
+    bypass_right_quarter()
 
-    _move_forward(dist=5)
+    _move_forward(dist=10)
 
 
 
